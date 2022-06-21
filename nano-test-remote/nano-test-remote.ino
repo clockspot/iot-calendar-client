@@ -10,11 +10,11 @@
 #include <ArduinoJson.h> //bblanchon
 
 #include <GxEPD2_3C.h>
-#include <Fonts/IOTLight14pt7b.h>
-#include <Fonts/IOTBold14pt7b.h>
-#include <Fonts/IOTRegular21pt7b.h>
-#include <Fonts/IOTLight36pt7b.h>
-#include <Fonts/IOTBold72pt7b.h>
+#include <Fonts/IOTLight16pt7b.h>
+#include <Fonts/IOTBold16pt7b.h>
+#include <Fonts/IOTBold21pt7b.h>
+#include <Fonts/IOTLight48pt7b.h>
+#include <Fonts/IOTBold108pt7b.h>
 #include "GxEPD2_display_selection_new_style.h"
 
 #include "config.h"
@@ -177,73 +177,106 @@ void setup() {
       //header
       if(day["weekdayRelative"]=="Today") {
         //render big top date
-        //the date should be centered, and day/month rendered to its sides
-        //date:  x = (display width - date width)/2
-        //day:   x = date x - day width - 15
-        //month: x = date x + date width + 15
-        display.setFont(&IOTBold72pt7b);
-        display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&cw,&tbh); //sets cw
-        y += tbh + 21; //new line
-        x = (display.width()-cw)/2;
-        display.setCursor(x, y);
+
+        //aproach A:
+        // //the date should be centered, and day/month rendered to its sides
+        // //date:  x = (display width - date width)/2
+        // //day:   x = date x - day width - 15
+        // //month: x = date x + date width + 15
+        // display.setFont(&IOTBold72pt7b);
+        // display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&cw,&tbh); //sets cw
+        // y += tbh + 21; //new line
+        // x = (display.width()-cw)/2;
+        // display.setCursor(x, y);
+        // display.print(day["date"].as<char*>());
+
+        // display.setFont(&IOTLight36pt7b);
+        // //render weekday
+        // display.getTextBounds(day["weekdayShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh); //sets tbw
+        // display.setCursor(x-tbw-20, y);
+        // display.print(day["weekdayShort"].as<char*>());
+        // //render month
+        // display.setCursor(x+cw+20, y);
+        // display.print(day["monthShort"].as<char*>());
+
+        //approach B:
+        //date is left-aligned in right half; day/month right-aligned in left half (ish)
+        //date:  x = (display width/2) + 0, y = n
+        //day:   x = (display width/2) - 30 - day width, y = n + day height + 12(?)
+        //month: x = (display width/2) - 30 - month width, y = n
+        display.setFont(&IOTBold108pt7b);
+        display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // Serial.println(tbw,DEC);
+        // Serial.println(tbh,DEC);
+        y += tbh + 21; //new line, big
+        x = (display.width()/2) + 0;
+        // Serial.println(x,DEC);
+        // Serial.println(y,DEC);
+        display.setCursor(x, y-256); //the -256 became necessary somewhere between 72pt and 108pt
         display.print(day["date"].as<char*>());
 
-        display.setFont(&IOTLight36pt7b);
+        display.setFont(&IOTLight48pt7b);
         //render weekday
-        display.getTextBounds(day["weekdayShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh); //sets tbw
-        display.setCursor(x-tbw-20, y);
+        display.getTextBounds(day["weekdayShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        x = (display.width()/2) - 30 - tbw;
+        // Serial.println(F("now"));
+        // Serial.println(x,DEC);
+        // Serial.println(y,DEC);
+        display.setCursor(x, y - tbh - 16);
         display.print(day["weekdayShort"].as<char*>());
         //render month
-        display.setCursor(x+cw+20, y);
+        display.getTextBounds(day["monthShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        x = (display.width()/2) - 30 - tbw;
+        display.setCursor(x, y);
         display.print(day["monthShort"].as<char*>());
 
         //render sunrise and sunset
         //entire line is centered; add up width of all components
         cw = 0;
-        display.setFont(&IOTLight14pt7b);
-        display.getTextBounds("SunriseSunset",0,0,&tbx,&tby,&tbw,&tbh);
-        y += tbh + 36; //new line
+        display.setFont(&IOTLight16pt7b);
+        display.getTextBounds("SunryseSunset",0,0,&tbx,&tby,&tbw,&tbh);
+        y += tbh + 32; //new line
         cw += tbw + 10 + 10; //gaps between
-        display.setFont(&IOTBold14pt7b);
+        display.setFont(&IOTBold16pt7b);
         display.getTextBounds(day["sun"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw;
         display.getTextBounds(day["sun"]["sunset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw + 20; //gap between
         //now render, using calculated center width
         x = (display.width()-cw)/2;
-        display.setFont(&IOTLight14pt7b);
+        display.setFont(&IOTLight16pt7b);
         display.getTextBounds("Sunrise",0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
         display.print("Sunrise");
         x += tbw + 10;
-        display.setFont(&IOTBold14pt7b);
+        display.setFont(&IOTBold16pt7b);
         display.getTextBounds(day["sun"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
         display.print(day["sun"]["sunrise"].as<char*>());
         x += tbw + 20;
-        display.setFont(&IOTLight14pt7b);
+        display.setFont(&IOTLight16pt7b);
         display.getTextBounds("Sunset",0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
         display.print("Sunset");
         x += tbw + 10;
-        display.setFont(&IOTBold14pt7b);
+        display.setFont(&IOTBold16pt7b);
         display.setCursor(x, y);
         display.print(day["sun"]["sunset"].as<char*>());
       } else {
         //render relative date, centered
-        y += 24; //padding
-        display.setFont(&IOTRegular21pt7b);
+        y += 14; //padding
+        display.setFont(&IOTBold21pt7b);
         display.getTextBounds(day["weekdayRelative"].as<char*>(),0,0,&tbx,&tby,&cw,&tbh); //sets cw
-        y += tbh + 14; //new line
+        y += tbh + 21; //new line
         x = (display.width()-cw)/2;
         display.setCursor(x, y);
         display.print(day["weekdayRelative"].as<char*>());
       }
-      y += 12; //padding
+      y += 2; //padding
       //render weather
       for (JsonObject w : day["weather"].as<JsonArray>()) {
         x = 10; //left padding
-        display.setFont(&IOTBold14pt7b);
+        display.setFont(&IOTBold16pt7b);
         if(w["isDaytime"]) {
           display.getTextBounds("High",0,0,&tbx,&tby,&tbw,&tbh);
           y += tbh + 14; //new line
@@ -265,17 +298,17 @@ void setup() {
         display.setCursor(x, y);
         //display.print("º");
         x += 15; //gap between
-        display.setFont(&IOTLight14pt7b);
+        display.setFont(&IOTLight16pt7b);
         display.setCursor(x, y);
         display.print(w["shortForecast"].as<char*>());
       }
-      y += 12; //padding
+      y += 8; //padding
       //render events
       for (JsonObject e : day["events"].as<JsonArray>()) {
         x = 20; //left padding
         if(e["style"]=="red") display.setTextColor(GxEPD_RED);
         else display.setTextColor(GxEPD_BLACK);
-        display.setFont(&IOTBold14pt7b);
+        display.setFont(&IOTBold16pt7b);
         display.getTextBounds("X",0,0,&tbx,&tby,&tbw,&tbh);
         y += tbh + 14; //new line
         display.setCursor(x, y);
@@ -286,13 +319,13 @@ void setup() {
           display.setCursor(x, y);
           display.print(e["timestart"].as<char*>());
           x += tbw + 15; //gap between
-          display.setFont(&IOTLight14pt7b); //leave the rest non-bolded
+          display.setFont(&IOTLight16pt7b); //leave the rest non-bolded
         }
         display.getTextBounds(e["summary"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
         display.print(e["summary"].as<char*>());
         x += tbw + 15;
-        display.setFont(&IOTLight14pt7b); //leave the rest non-bolded
+        display.setFont(&IOTLight16pt7b); //leave the rest non-bolded
         if(e["allday"] && e["dend"]!=e["dstart"]) {
           display.getTextBounds("(thru",0,0,&tbx,&tby,&tbw,&tbh);
           display.setCursor(x, y);
