@@ -12,7 +12,7 @@
 #include <GxEPD2_3C.h>
 #include <Fonts/IOTLight16pt7b.h>
 #include <Fonts/IOTBold16pt7b.h>
-#include <Fonts/IOTBold21pt7b.h>
+#include <Fonts/IOTBold20pt7b.h>
 #include <Fonts/IOTLight48pt7b.h>
 #include <Fonts/IOTBold108pt7b.h>
 #include "GxEPD2_display_selection_new_style.h"
@@ -234,7 +234,7 @@ void setup() {
         //entire line is centered; add up width of all components
         cw = 0;
         display.setFont(&IOTLight16pt7b);
-        display.getTextBounds("SunryseSunset",0,0,&tbx,&tby,&tbw,&tbh);
+        display.getTextBounds("SunriseSunset",0,0,&tbx,&tby,&tbw,&tbh);
         y += tbh + 32; //new line
         cw += tbw + 10 + 10; //gaps between
         display.setFont(&IOTBold16pt7b);
@@ -265,14 +265,14 @@ void setup() {
       } else {
         //render relative date, centered
         y += 14; //padding
-        display.setFont(&IOTBold21pt7b);
+        display.setFont(&IOTBold20pt7b);
         display.getTextBounds(day["weekdayRelative"].as<char*>(),0,0,&tbx,&tby,&cw,&tbh); //sets cw
         y += tbh + 21; //new line
         x = (display.width()-cw)/2;
         display.setCursor(x, y);
         display.print(day["weekdayRelative"].as<char*>());
       }
-      y += 2; //padding
+      y += 3; //padding
       //render weather
       for (JsonObject w : day["weather"].as<JsonArray>()) {
         x = 10; //left padding
@@ -305,21 +305,32 @@ void setup() {
       y += 8; //padding
       //render events
       for (JsonObject e : day["events"].as<JsonArray>()) {
-        x = 20; //left padding
+        x = 10; //left padding //formerly 20
         if(e["style"]=="red") display.setTextColor(GxEPD_RED);
         else display.setTextColor(GxEPD_BLACK);
         display.setFont(&IOTBold16pt7b);
         display.getTextBounds("X",0,0,&tbx,&tby,&tbw,&tbh);
         y += tbh + 14; //new line
         display.setCursor(x, y);
-        display.print("-");
-        x += 15; //gap between
+        //display.print("-");
+        //x += 15; //gap between
         if(!e["allday"]) {
           display.getTextBounds(e["timestart"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
           display.setCursor(x, y);
           display.print(e["timestart"].as<char*>());
-          x += tbw + 15; //gap between
+          x += tbw;
           display.setFont(&IOTLight16pt7b); //leave the rest non-bolded
+          if(e.containsKey("timeend")) {
+            display.getTextBounds("–",0,0,&tbx,&tby,&tbw,&tbh);
+            display.setCursor(x, y);
+            display.print("–");
+            x += tbw;
+            display.getTextBounds(e["timeend"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+            display.setCursor(x, y);
+            display.print(e["timeend"].as<char*>());
+            x += tbw;
+          }
+          x += 15; //gap between
         }
         display.getTextBounds(e["summary"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
