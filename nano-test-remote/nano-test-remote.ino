@@ -12,7 +12,7 @@
 #include <GxEPD2_3C.h>
 #include <Fonts/IOTLight16pt7b.h>
 #include <Fonts/IOTBold16pt7b.h>
-#include <Fonts/IOTBold20pt7b.h>
+#include <Fonts/IOTRegular21pt7b.h>
 #include <Fonts/IOTLight48pt7b.h>
 #include <Fonts/IOTBold108pt7b.h>
 #include "GxEPD2_display_selection_new_style.h"
@@ -25,6 +25,9 @@ void setup() {
   //Serial.begin(9600);
   //while(!Serial); //only works on 33 IoT
   delay(1000);
+
+  //Clear display
+  displayClear();
 
   //Check status of wifi module up front
   if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); return; }
@@ -42,6 +45,7 @@ void setup() {
     Serial.print(F("Local IP: ")); Serial.println(WiFi.localIP());
   } else {
     Serial.println(F("Wasn't able to connect."));
+    displayError(F("Couldn't connect to WiFi."));
     return;
   }
 
@@ -51,6 +55,7 @@ void setup() {
   sslClient.setTimeout(15000);
   if(!sslClient.connect(DATA_HOST, 443)) {
     Serial.println(F("Wasn't able to connect to host."));
+    displayError(F("Couldn't connect to data host."));
     return;
   }
 
@@ -72,6 +77,7 @@ void setup() {
   //the rest adapted from https://arduinojson.org/v6/example/http-sslClient/
   if (sslClient.println() == 0) {
     Serial.println(F("Failed to send request"));
+    displayError(F("Failed to send data request."));
     sslClient.stop();
     return;
   }
@@ -81,6 +87,7 @@ void setup() {
   sslClient.readBytesUntil('\r', status, sizeof(status));
   if (strcmp(status, "HTTP/1.1 200 OK") != 0) {
     Serial.print(F("Unexpected response: "));
+    displayError(F("Data error. Please restart."));
     Serial.println(status);
     sslClient.stop();
     return;
@@ -90,19 +97,21 @@ void setup() {
   char endOfHeaders[] = "\r\n\r\n";
   if (!sslClient.find(endOfHeaders)) {
     Serial.println(F("Invalid response"));
+    displayError(F("Data error. Please restart."));
     sslClient.stop();
     return;
   }
 
   // Allocate the JSON document
   // Use arduinojson.org/v6/assistant to compute the capacity.
-  DynamicJsonDocument doc(4096);
+  DynamicJsonDocument doc(8192);
   
   // Parse JSON object
   DeserializationError error = deserializeJson(doc, sslClient);
   if (error) {
     Serial.print(F("deserializeJson() failed: "));
     Serial.println(error.f_str());
+    displayError(F("Couldn't process data. Please restart."));
     sslClient.stop();
     return;
   }
@@ -126,9 +135,9 @@ void setup() {
   //     Serial.print(day["monthShort"].as<char*>());
   //     Serial.println();
   //     Serial.print(F("Sunrise "));
-  //     Serial.print(day["sun"]["sunrise"].as<char*>());
+  //     Serial.print(day["sky"]["sunrise"].as<char*>());
   //     Serial.print(F("  Sunset "));
-  //     Serial.print(day["sun"]["sunset"].as<char*>());
+  //     Serial.print(day["sky"]["sunset"].as<char*>());
   //   }
   //   Serial.println();
   //   //weather
@@ -185,7 +194,7 @@ void setup() {
         // //month: x = date x + date width + 15
         // display.setFont(&IOTBold72pt7b);
         // display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&cw,&tbh); //sets cw
-        // y += tbh + 21; //new line
+        // y += tbh + 21*2; //new line
         // x = (display.width()-cw)/2;
         // display.setCursor(x, y);
         // display.print(day["date"].as<char*>());
@@ -205,10 +214,11 @@ void setup() {
         //day:   x = (display width/2) - 30 - day width, y = n + day height + 12(?)
         //month: x = (display width/2) - 30 - month width, y = n
         display.setFont(&IOTBold108pt7b);
+        if(day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
         display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         // Serial.println(tbw,DEC);
         // Serial.println(tbh,DEC);
-        y += tbh + 21; //new line, big
+        y += 155; //new line - these used to be based on tbh, which is why they're here, after the first getTextBounds of the line
         x = (display.width()/2) + 0;
         // Serial.println(x,DEC);
         // Serial.println(y,DEC);
@@ -222,7 +232,7 @@ void setup() {
         // Serial.println(F("now"));
         // Serial.println(x,DEC);
         // Serial.println(y,DEC);
-        display.setCursor(x, y - tbh - 16);
+        display.setCursor(x, y - 72);
         display.print(day["weekdayShort"].as<char*>());
         //render month
         display.getTextBounds(day["monthShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
@@ -230,62 +240,207 @@ void setup() {
         display.setCursor(x, y);
         display.print(day["monthShort"].as<char*>());
 
+        display.setTextColor(GxEPD_BLACK);
+
+        y += 12 + 4; //padding
         //render sunrise and sunset
         //entire line is centered; add up width of all components
-        cw = 0;
+        cw = 0; //center width
         display.setFont(&IOTLight16pt7b);
         display.getTextBounds("SunriseSunset",0,0,&tbx,&tby,&tbw,&tbh);
-        y += tbh + 32; //new line
         cw += tbw + 10 + 10; //gaps between
+        //uncomment if you want dawn/dusk (1 of 3)
+        // display.getTextBounds(day["sky"]["dawn"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // cw += tbw + 13; //poor man's em dash width
+        // display.getTextBounds(day["sky"]["dusk"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // cw += tbw + 13; //poor man's em dash width
         display.setFont(&IOTBold16pt7b);
-        display.getTextBounds(day["sun"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        display.getTextBounds(day["sky"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw;
-        display.getTextBounds(day["sun"]["sunset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        display.getTextBounds(day["sky"]["sunset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw + 20; //gap between
         //now render, using calculated center width
+        y += 16*2; //new line
         x = (display.width()-cw)/2;
         display.setFont(&IOTLight16pt7b);
-        display.getTextBounds("Sunrise",0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
         display.print("Sunrise");
+        display.getTextBounds("Sunrise",0,0,&tbx,&tby,&tbw,&tbh);
         x += tbw + 10;
+        //uncomment if you want dawn/dusk (2 of 3)
+        // display.setCursor(x, y); 
+        // display.print(day["sky"]["dawn"].as<char*>());
+        // display.getTextBounds(day["sky"]["dawn"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // x += tbw;
+        // display.setCursor(x, y); display.print("-");
+        // display.setCursor(x+4, y); display.print("-"); //poor man's em dash
+        // x += 13; //guessed em width
         display.setFont(&IOTBold16pt7b);
-        display.getTextBounds(day["sun"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
-        display.print(day["sun"]["sunrise"].as<char*>());
-        x += tbw + 20;
+        display.print(day["sky"]["sunrise"].as<char*>());
+        display.getTextBounds(day["sky"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        x += tbw;
+        x += 20; //gap between halves
         display.setFont(&IOTLight16pt7b);
-        display.getTextBounds("Sunset",0,0,&tbx,&tby,&tbw,&tbh);
         display.setCursor(x, y);
         display.print("Sunset");
+        display.getTextBounds("Sunset",0,0,&tbx,&tby,&tbw,&tbh);
         x += tbw + 10;
         display.setFont(&IOTBold16pt7b);
         display.setCursor(x, y);
-        display.print(day["sun"]["sunset"].as<char*>());
+        display.print(day["sky"]["sunset"].as<char*>());
+        //uncomment if you want dawn/dusk (3 of 3)
+        // display.getTextBounds(day["sky"]["sunset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // x += tbw;
+        // display.setFont(&IOTLight16pt7b);
+        // display.setCursor(x, y); display.print("-");
+        // display.setCursor(x+4, y); display.print("-"); //poor man's em dash
+        // x += 13; //guessed em width
+        // display.setCursor(x, y);
+        // display.print(day["sky"]["dusk"].as<char*>());
+
+        //render moonrise and moonset
+        //entire line is centered; add up width of all components
+        cw = 0; //center width
+        if(day["sky"]["moonfixed"]) {
+          display.setFont(&IOTLight16pt7b);
+          display.getTextBounds("Moon",0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 10; //gap between
+          display.setFont(&IOTBold16pt7b);
+          display.getTextBounds(day["sky"]["moonfixed"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 20; //gap after
+        } else {
+          display.setFont(&IOTLight16pt7b);
+          display.getTextBounds("MoonriseMoonset",0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 10 + 10; //gaps between
+          display.setFont(&IOTBold16pt7b);
+          display.getTextBounds(day["sky"]["moonrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 20; //gap after
+          display.getTextBounds(day["sky"]["moonset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 20; //gap after
+        }
+        display.setFont(&IOTLight16pt7b);
+        display.getTextBounds("Phase",0,0,&tbx,&tby,&tbw,&tbh);
+        cw += tbw + 10; //gap between
+        display.setFont(&IOTBold16pt7b);
+        display.getTextBounds(day["sky"]["moonphase"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        cw += tbw;
+
+        //now render, using calculated center width
+        y += 16*2; //new line
+        x = (display.width()-cw)/2;
+        if(day["sky"]["moonfixed"]) {
+          display.setFont(&IOTLight16pt7b);
+          display.setCursor(x, y);
+          display.print("Moon");
+          display.getTextBounds("Moon",0,0,&tbx,&tby,&tbw,&tbh);
+          x += tbw + 10;
+          display.setFont(&IOTBold16pt7b);
+          display.setCursor(x, y);
+          display.print(day["sky"]["moonfixed"].as<char*>());
+          display.getTextBounds(day["sky"]["moonfixed"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          x += tbw + 20;
+        } else {
+          if(!day["sky"]["upfirst"]) { //moonrise then moonset (below)
+            display.setFont(&IOTLight16pt7b);
+            display.setCursor(x, y);
+            display.print("Moonrise");
+            display.getTextBounds("Moonrise",0,0,&tbx,&tby,&tbw,&tbh);
+            x += tbw + 10;
+            display.setFont(&IOTBold16pt7b);
+            display.setCursor(x, y);
+            display.print(day["sky"]["moonrise"].as<char*>());
+            display.getTextBounds(day["sky"]["moonrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+            x += tbw + 20;
+          }
+          display.setFont(&IOTLight16pt7b);
+          display.setCursor(x, y);
+          display.print("Moonset");
+          display.getTextBounds("Moonset",0,0,&tbx,&tby,&tbw,&tbh);
+          x += tbw + 10;
+          display.setFont(&IOTBold16pt7b);
+          display.setCursor(x, y);
+          display.print(day["sky"]["moonset"].as<char*>());
+          display.getTextBounds(day["sky"]["moonset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          x += tbw + 20;
+          if(day["sky"]["upfirst"]) { //moonset (above) then moonrise
+            display.setFont(&IOTLight16pt7b);
+            display.setCursor(x, y);
+            display.print("Moonrise");
+            display.getTextBounds("Moonrise",0,0,&tbx,&tby,&tbw,&tbh);
+            x += tbw + 10;
+            display.setFont(&IOTBold16pt7b);
+            display.setCursor(x, y);
+            display.print(day["sky"]["moonrise"].as<char*>());
+            display.getTextBounds(day["sky"]["moonrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+            x += tbw + 20;
+          }
+        }
+        display.setFont(&IOTLight16pt7b);
+        display.setCursor(x, y);
+        display.print("Phase");
+        display.getTextBounds("Phase",0,0,&tbx,&tby,&tbw,&tbh);
+        x += tbw + 10;
+        display.setFont(&IOTBold16pt7b);
+        display.setCursor(x, y);
+        display.print(day["sky"]["moonphase"].as<char*>());
+        
       } else {
         //render relative date, centered
-        y += 14; //padding
-        display.setFont(&IOTBold20pt7b);
-        display.getTextBounds(day["weekdayRelative"].as<char*>(),0,0,&tbx,&tby,&cw,&tbh); //sets cw
-        y += tbh + 21; //new line
+        y += 12; //padding
+        // cw = 0;
+        // display.setFont(&IOTRegular21pt7b);
+        // display.getTextBounds(day["weekdayRelative"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // y += 21*2; //new line
+        // cw += tbw + 10;
+        // display.getTextBounds(day["dateShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // cw += tbw;
+        // x = (display.width()-cw)/2;
+        // display.setCursor(x, y);
+        // display.print(day["weekdayRelative"].as<char*>());
+        // display.getTextBounds(day["weekdayRelative"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        // x += tbw + 10;
+        // display.setCursor(x, y);
+        // display.print(day["dateShort"].as<char*>());
+
+        cw = 0;
+        display.setFont(&IOTRegular21pt7b);
+        display.getTextBounds(day["weekdayShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        y += 21*2; //new line
+        cw += tbw + 12;
+        display.getTextBounds(day["monthShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        cw += tbw + 12;
+        //display.setFont(&IOTBold21pt7b);
+        display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        cw += tbw;
         x = (display.width()-cw)/2;
+        //display.setFont(&IOTRegular21pt7b);
         display.setCursor(x, y);
-        display.print(day["weekdayRelative"].as<char*>());
+        display.print(day["weekdayShort"].as<char*>());
+        display.getTextBounds(day["weekdayShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        x += tbw + 12;
+        display.setCursor(x, y);
+        display.print(day["monthShort"].as<char*>());
+        display.getTextBounds(day["monthShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+        x += tbw + 12;
+        //display.setFont(&IOTBold21pt7b);
+        display.setCursor(x, y);
+        display.print(day["date"].as<char*>());
       }
-      y += 3; //padding
+      y += 12; //padding
       //render weather
       for (JsonObject w : day["weather"].as<JsonArray>()) {
         x = 10; //left padding
         display.setFont(&IOTBold16pt7b);
         if(w["isDaytime"]) {
           display.getTextBounds("High",0,0,&tbx,&tby,&tbw,&tbh);
-          y += tbh + 14; //new line
+          y += 16*2; //new line
           display.setCursor(x, y);
           display.print("High");
           x += tbw + 10; //gap between
         } else {
           display.getTextBounds("Low",0,0,&tbx,&tby,&tbw,&tbh);
-          y += tbh + 14; //new line
+          y += 16*2; //new line
           display.setCursor(x, y);
           display.print("Low");
           x += tbw + 10; //gap between
@@ -295,14 +450,28 @@ void setup() {
         display.setCursor(x, y);
         display.print(buf);
         x += tbw;
-        display.setCursor(x, y);
-        //display.print("º");
-        x += 15; //gap between
         display.setFont(&IOTLight16pt7b);
+        //display precipitation if applicable
+        if(w.containsKey("precipChance") && w["precipChance"]) {
+          display.getTextBounds("/",0,0,&tbx,&tby,&tbw,&tbh);
+          display.setCursor(x, y);
+          display.print("/");
+          x += tbw;
+          itoa(w["precipChance"].as<int>(),buf,10); //int to char buffer
+          display.getTextBounds(buf,0,0,&tbx,&tby,&tbw,&tbh);
+          display.setCursor(x, y);
+          display.print(buf);
+          x += tbw;
+          display.getTextBounds("%",0,0,&tbx,&tby,&tbw,&tbh);
+          display.setCursor(x, y);
+          display.print("%");
+          x += tbw;
+        }
+        x += 15; //gap before forecast
         display.setCursor(x, y);
         display.print(w["shortForecast"].as<char*>());
       }
-      y += 8; //padding
+      y += 12; //padding
       //render events
       for (JsonObject e : day["events"].as<JsonArray>()) {
         x = 10; //left padding //formerly 20
@@ -310,7 +479,7 @@ void setup() {
         else display.setTextColor(GxEPD_BLACK);
         display.setFont(&IOTBold16pt7b);
         display.getTextBounds("X",0,0,&tbx,&tby,&tbw,&tbh);
-        y += tbh + 14; //new line
+        y += 16*2; //new line
         display.setCursor(x, y);
         //display.print("-");
         //x += 15; //gap between
@@ -321,10 +490,10 @@ void setup() {
           x += tbw;
           display.setFont(&IOTLight16pt7b); //leave the rest non-bolded
           if(e.containsKey("timeend")) {
-            display.getTextBounds("–",0,0,&tbx,&tby,&tbw,&tbh);
-            display.setCursor(x, y);
-            display.print("–");
-            x += tbw;
+            x += 3;
+            display.setCursor(x, y); display.print("-");
+            display.setCursor(x+4, y); display.print("-"); //poor man's em dash
+            x += 13; //guessed em width
             display.getTextBounds(e["timeend"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
             display.setCursor(x, y);
             display.print(e["timeend"].as<char*>());
@@ -355,6 +524,32 @@ void setup() {
   display.hibernate();
   
 } //end fn setup
+
+void displayError(String msg) {
+  // display on e-ink
+  display.init(115200);
+  display.setRotation(1);
+  display.setTextWrap(false);
+  display.setTextColor(GxEPD_BLACK);
+  display.setFont(&IOTLight16pt7b);
+
+  //vars for calculating text bounds and setting draw origin
+  int16_t tbx, tby; uint16_t tbw, tbh;
+  display.getTextBounds(msg, 0, 0, &tbx, &tby, &tbw, &tbh);
+
+  display.setFullWindow();
+  display.firstPage();
+  do
+  {
+    display.fillScreen(GxEPD_WHITE);
+    display.setCursor(((display.width() - tbw) / 2) - tbx, ((display.height() - tbh) / 2) - tby);
+    display.print(msg);
+  } while (display.nextPage());
+  display.hibernate();
+}
+void displayClear() {
+  displayError("");
+}
 
 void loop() {
   // To inspect the HTTP response directly, uncomment this code, and in setup(), comment out "Check HTTP Status" and everything afterward
