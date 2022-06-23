@@ -241,6 +241,7 @@ void setup() {
         display.print(day["monthShort"].as<char*>());
 
         display.setTextColor(GxEPD_BLACK);
+        bool showDawnDusk = day["sky"].containsKey("dawn");
 
         y += 12 + 4; //padding
         //render sunrise and sunset
@@ -249,11 +250,12 @@ void setup() {
         display.setFont(&IOTLight16pt7b);
         display.getTextBounds("SunriseSunset",0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw + 10 + 10; //gaps between
-        //uncomment if you want dawn/dusk (1 of 3)
-        // display.getTextBounds(day["sky"]["dawn"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
-        // cw += tbw + 13; //poor man's em dash width
-        // display.getTextBounds(day["sky"]["dusk"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
-        // cw += tbw + 13; //poor man's em dash width
+        if(showDawnDusk) {
+          display.getTextBounds(day["sky"]["dawn"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 13; //poor man's em dash width
+          display.getTextBounds(day["sky"]["dusk"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          cw += tbw + 13; //poor man's em dash width
+        }
         display.setFont(&IOTBold16pt7b);
         display.getTextBounds(day["sky"]["sunrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw;
@@ -267,14 +269,15 @@ void setup() {
         display.print("Sunrise");
         display.getTextBounds("Sunrise",0,0,&tbx,&tby,&tbw,&tbh);
         x += tbw + 10;
-        //uncomment if you want dawn/dusk (2 of 3)
-        // display.setCursor(x, y); 
-        // display.print(day["sky"]["dawn"].as<char*>());
-        // display.getTextBounds(day["sky"]["dawn"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
-        // x += tbw;
-        // display.setCursor(x, y); display.print("-");
-        // display.setCursor(x+4, y); display.print("-"); //poor man's em dash
-        // x += 13; //guessed em width
+        if(showDawnDusk) {
+          display.setCursor(x, y); 
+          display.print(day["sky"]["dawn"].as<char*>());
+          display.getTextBounds(day["sky"]["dawn"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          x += tbw;
+          display.setCursor(x, y); display.print("-");
+          display.setCursor(x+4, y); display.print("-"); //poor man's em dash
+          x += 13; //guessed em width
+        }
         display.setFont(&IOTBold16pt7b);
         display.setCursor(x, y);
         display.print(day["sky"]["sunrise"].as<char*>());
@@ -289,15 +292,16 @@ void setup() {
         display.setFont(&IOTBold16pt7b);
         display.setCursor(x, y);
         display.print(day["sky"]["sunset"].as<char*>());
-        //uncomment if you want dawn/dusk (3 of 3)
-        // display.getTextBounds(day["sky"]["sunset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
-        // x += tbw;
-        // display.setFont(&IOTLight16pt7b);
-        // display.setCursor(x, y); display.print("-");
-        // display.setCursor(x+4, y); display.print("-"); //poor man's em dash
-        // x += 13; //guessed em width
-        // display.setCursor(x, y);
-        // display.print(day["sky"]["dusk"].as<char*>());
+        if(showDawnDusk) {
+          display.getTextBounds(day["sky"]["sunset"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+          x += tbw;
+          display.setFont(&IOTLight16pt7b);
+          display.setCursor(x, y); display.print("-");
+          display.setCursor(x+4, y); display.print("-"); //poor man's em dash
+          x += 13; //guessed em width
+          display.setCursor(x, y);
+          display.print(day["sky"]["dusk"].as<char*>());
+        }
 
         //render moonrise and moonset
         //entire line is centered; add up width of all components
@@ -320,9 +324,6 @@ void setup() {
           cw += tbw + 20; //gap after
         }
         display.setFont(&IOTLight16pt7b);
-        display.getTextBounds("Phase",0,0,&tbx,&tby,&tbw,&tbh);
-        cw += tbw + 10; //gap between
-        display.setFont(&IOTBold16pt7b);
         display.getTextBounds(day["sky"]["moonphase"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw;
 
@@ -351,6 +352,11 @@ void setup() {
             display.setCursor(x, y);
             display.print(day["sky"]["moonrise"].as<char*>());
             display.getTextBounds(day["sky"]["moonrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
+            x += tbw + 10;
+            display.setFont(&IOTLight16pt7b);
+            display.setCursor(x, y);
+            display.print(day["sky"]["moonphase"].as<char*>());
+            display.getTextBounds(day["sky"]["moonphase"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
             x += tbw + 20;
           }
           display.setFont(&IOTLight16pt7b);
@@ -373,17 +379,12 @@ void setup() {
             display.setCursor(x, y);
             display.print(day["sky"]["moonrise"].as<char*>());
             display.getTextBounds(day["sky"]["moonrise"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
-            x += tbw + 20;
+            x += tbw + 10;
+            display.setFont(&IOTLight16pt7b);
+            display.setCursor(x, y);
+            display.print(day["sky"]["moonphase"].as<char*>());
           }
         }
-        display.setFont(&IOTLight16pt7b);
-        display.setCursor(x, y);
-        display.print("Phase");
-        display.getTextBounds("Phase",0,0,&tbx,&tby,&tbw,&tbh);
-        x += tbw + 10;
-        display.setFont(&IOTBold16pt7b);
-        display.setCursor(x, y);
-        display.print(day["sky"]["moonphase"].as<char*>());
         
       } else {
         //render relative date, centered
