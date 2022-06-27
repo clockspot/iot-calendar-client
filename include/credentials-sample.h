@@ -65,8 +65,7 @@ const int weatherPosY = 10;
 // Set orientation of calendar 0 = 0% horisontal, 1 = 90% vertical, 2 = 180% horisontal, 3 = 270% vertical
 const int calendarOrientation = 1;
 
-#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define HOUR_TO_WAKE  5        // Time ESP32 will wake and refresh at a specific hour each day - default is five in the morning
+
 
 // Daily greetings in hte top line - change "Happy" with something else for variation on your week :)
 const char * weekday[] = { "Happy Sunday", "Happy Monday", "Happy Tuesday", "Happy Wednesday", "Happy Thursday", "Happy Friday", "Happy Saturday"};
