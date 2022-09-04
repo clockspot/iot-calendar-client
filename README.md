@@ -4,6 +4,10 @@ Arduino/ESP32 software for an e-ink calendar, intended for use with [iot-calenda
 
 <img src="https://github.com/clockspot/iot-calendar-server/raw/main/example.jpg">
 
-Forked from [kristiantm/eink-family-calendar-esp32](https://github.com/kristiantm/eink-family-calendar-esp32), which details the hardware specs for this project.
+Forked from [kristiantm/eink-family-calendar-esp32](https://github.com/kristiantm/eink-family-calendar-esp32), which details the hardware specs and required libraries for this project.
 
-At this writing (as my ESP32 hasn't come in yet), I'm using an Arduino Nano 33 IoT as a test bed. `/nano-test-local` is meant to pull NWS (JSON) and iCal data and process it locally, but for now I have set this aside in favor of `/nano-test-remote`, which leaves the hard work to [iot-calendar-server](https://github.com/clockspot/iot-calendar-server) and will simply render the data on the e-ink screen.
+Sketch for LOLIN D32 is in `/lolin32`.
+
+Earlier test sketches written for Arduino Nano 33 IoT are in `/nano-test-local` (processes locally) and `/nano-test-remote` (relies on [iot-calendar-server](https://github.com/clockspot/iot-calendar-server)).
+
+Once you have installed the Adafruit GFX Library, you will need to copy the IOT Symbols font from `/resources` into the library's Fonts folder (on macOS, `~/Documents/Arduino/libraries/Adafruit_GFX_Library/Fonts`). This draws the sun and moon icons. For the text fonts, you will need to edit the sketch to use the GFX library's [standard fonts](https://learn.adafruit.com/adafruit-gfx-graphics-library/using-fonts), or [ones of your own making](https://learn.adafruit.com/adafruit-gfx-graphics-library/using-fonts#adding-new-fonts-2002831). (The font I use, the wonderful [Metric](https://klim.co.nz/retail-fonts/metric/) from Klim Type Foundry, I am not licensed to share.)
