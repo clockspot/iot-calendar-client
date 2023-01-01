@@ -2,7 +2,7 @@
 
 Arduino/ESP32 software for an e-ink calendar, intended for use with [iot-calendar-server](https://github.com/clockspot/iot-calendar-server).
 
-<img src="https://github.com/clockspot/iot-calendar-server/raw/main/example.jpg">
+<img src="https://user-images.githubusercontent.com/9385318/210183103-a624e4f4-9a1b-46c9-8aa5-d11bb0678466.jpg">
 
 Forked from [kristiantm/eink-family-calendar-esp32](https://github.com/kristiantm/eink-family-calendar-esp32), which details the hardware specs and required libraries for this project.
 
