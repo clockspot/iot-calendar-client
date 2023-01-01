@@ -1,126 +1,151 @@
-//Working sketch for Arduino Nano 33 IoT to pull data from iot-calendar-server
-//(done while waiting for my ESP32 to turn up in the mail!)
+//Sketch for LOLIN ESP32 to pull data from iot-calendar-server
+//Adapted from https://github.com/kristiantm/eink-family-calendar-esp32
+//Earlier alternate screen layouts, etc. in history of nano-test-local sketch
 
-//sources:
-//wifinina: https://github.com/clockspot/arduino-ledclock
-//json: https://arduinojson.org/v6/example/http-client/
+#include "config.h"
 
-#include <SPI.h>
-#include <WiFiNINA.h>
-#include <ArduinoJson.h> //bblanchon
-
+#include <ArduinoJson.h> // https://github.com/bblanchon/ArduinoJson needs version v6 or above
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h> // Needs to be from the ESP32 platform version 3.2.0 or later, as the previous has problems with http-redirect
 #include <GxEPD2_3C.h>
+#define ENABLE_GxEPD2_GFX 0
 #include <Fonts/IOTLight16pt7b.h>
 #include <Fonts/IOTBold16pt7b.h>
 #include <Fonts/IOTRegular21pt7b.h>
 #include <Fonts/IOTLight48pt7b.h>
 #include <Fonts/IOTBold108pt7b.h>
 #include <Fonts/IOTSymbols16pt7b.h>
-#include "GxEPD2_display_selection_new_style.h"
 
-#include "config.h"
+// Mapping of Waveshare ESP32 Driver Board - 3C is tri-color displays, BW is black and white
+GxEPD2_3C<GxEPD2_750c_Z08, GxEPD2_750c_Z08::HEIGHT/2> display(GxEPD2_750c_Z08(/*CS=*/ 15, /*DC=*/ 27, /*RST=*/ 26, /*BUSY=*/ 25));
+//GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT/2> display(GxEPD2_750_T7(/*CS=*/15, /*DC=*/ 27, /*RST=*/ 26, /*BUSY=*/ 25));
 
-WiFiSSLClient sslClient;
+float battLevel;
+HTTPClient http;
 
+// Main flow of the program. It is designed to boot up, pull the info and refresh the screen, and then go back into deep sleep.
 void setup() {
-  Serial.begin(9600);
-  //while(!Serial); //only works on 33 IoT - uncomment before flight
-  delay(1000);
 
-  //Clear display
+  // Initialize board
+  Serial.begin(115200);
+
+  //Get battery level in mV
+  //https://www.youtube.com/watch?v=yZjpYmWVLh8&t=88s
+    //battLevel = (analogRead(35) / 7.445) / 4.096;
+  battLevel = readBatteryVoltage();
+  //TODO a conversion similar to this one, after testing real-world voltages
+  // if (voltage >= 4.1) percentage = 100;
+  // else if (voltage >= 3.9) percentage = 75;
+  // else if (voltage >= 3.7) percentage = 50;
+  // else if (voltage >= 3.6) percentage = 25;
+  // else if (voltage <= 3.5) percentage = 0;
+
+  //Initialize and clear display
+  display.init(115200);
+  SPI.end(); // release standard SPI pins, e.g. SCK(18), MISO(19), MOSI(23), SS(5)
+  SPI.begin(13, 12, 14, 15); // Map and init SPI pins SCK(13), MISO(12), MOSI(14), SS(15) - adjusted to the recommended PIN settings from Waveshare - note that this is not the default for most screens
+  display.setRotation(3);
+  display.setTextWrap(false);
   displayClear();
 
-  //Check status of wifi module up front
-  if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); return; }
-  else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
-
   //Start wifi
-  Serial.print(F("\nConnecting to WiFi SSID "));
-  Serial.println(NETWORK_SSID);
-  WiFi.begin(NETWORK_SSID, NETWORK_PASS); //WPA - hangs while connecting
-  if(WiFi.status()==WL_CONNECTED){ //did it work?
-    //Serial.print(millis());
-    Serial.println(F("Connected!"));
-    //Serial.print(F("SSID: ")); Serial.println(WiFi.SSID());
-    Serial.print(F("Signal strength (RSSI): ")); Serial.print(WiFi.RSSI()); Serial.println(F(" dBm"));
-    Serial.print(F("Local IP: ")); Serial.println(WiFi.localIP());
-  } else {
+  for(int attempts=0; attempts<3; attempts++) {
+    Serial.print(F("\nConnecting to WiFi SSID "));
+    Serial.println(NETWORK_SSID);
+    WiFi.begin(NETWORK_SSID, NETWORK_PASS);
+    int timeout = 0;
+    while(WiFi.status()!=WL_CONNECTED && timeout<15) {
+      timeout++; delay(1000);
+    }
+    if(WiFi.status()==WL_CONNECTED){ //did it work?
+      //Serial.print(millis());
+      Serial.println(F("Connected!"));
+      //Serial.print(F("SSID: ")); Serial.println(WiFi.SSID());
+      Serial.print(F("Signal strength (RSSI): ")); Serial.print(WiFi.RSSI()); Serial.println(F(" dBm"));
+      Serial.print(F("Local IP: ")); Serial.println(WiFi.localIP());
+      break; //leave attempts loop
+    } else {
+      // #ifdef NETWORK2_SSID
+      //   Serial.print(F("\nConnecting to WiFi SSID "));
+      //   Serial.println(NETWORK2_SSID);
+      //   WiFi.begin(NETWORK2_SSID, NETWORK2_PASS);
+      //   int timeout = 0;
+      //   while(WiFi.status()!=WL_CONNECTED && timeout<15) {
+      //     timeout++; delay(1000);
+      //   }
+      //   if(WiFi.status()==WL_CONNECTED){ //did it work?
+      //     //Serial.print(millis());
+      //     Serial.println(F("Connected!"));
+      //     //Serial.print(F("SSID: ")); Serial.println(WiFi.SSID());
+      //     Serial.print(F("Signal strength (RSSI): ")); Serial.print(WiFi.RSSI()); Serial.println(F(" dBm"));
+      //     Serial.print(F("Local IP: ")); Serial.println(WiFi.localIP());
+      //     break; //leave attempts loop
+      //   }
+      // #endif
+    }
+  }
+  if(WiFi.status()!=WL_CONNECTED) {
     Serial.println(F("Wasn't able to connect."));
     displayError(F("Couldn't connect to WiFi."));
+    //Close unneeded things
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     return;
   }
 
-  //Connect to data host
-  Serial.print(F("\nConnecting to data host "));
-  Serial.println(DATA_HOST);
-  sslClient.setTimeout(15000);
-  if(!sslClient.connect(DATA_HOST, 443)) {
-    Serial.println(F("Wasn't able to connect to host."));
-    displayError(F("Couldn't connect to data host."));
-    return;
-  }
+  // Get time from timeserver - used when going into deep sleep again to ensure that we wake at the right hour
+  configTime(TZ_OFFSET_SEC, DST_OFFSET_SEC, NTP_HOST);
 
-  Serial.println("Connected!");
-
-  //Make an HTTP request
-  Serial.print(F("GET "));
-  Serial.print(DATA_PATH);
-  Serial.println(F(" HTTP/1.1"));
-  sslClient.print(F("GET "));
-  sslClient.print(DATA_PATH);
-  sslClient.println(F(" HTTP/1.1"));
-
-  sslClient.print(F("Host: "));
-  sslClient.println(DATA_HOST);
-
-  sslClient.println(F("Connection: close"));
-
-  //the rest adapted from https://arduinojson.org/v6/example/http-sslClient/
-  if (sslClient.println() == 0) {
-    Serial.println(F("Failed to send request"));
-    displayError(F("Failed to send data request."));
-    sslClient.stop();
-    return;
-  }
-
-  // Check HTTP status
-  char status[32] = {0};
-  sslClient.readBytesUntil('\r', status, sizeof(status));
-  if (strcmp(status, "HTTP/1.1 200 OK") != 0) {
-    Serial.print(F("Unexpected response: "));
-    displayError(F("Data error. Please restart."));
-    Serial.println(status);
-    sslClient.stop();
-    return;
-  }
-
-  // Skip HTTP headers
-  char endOfHeaders[] = "\r\n\r\n";
-  if (!sslClient.find(endOfHeaders)) {
-    Serial.println(F("Invalid response"));
-    displayError(F("Data error. Please restart."));
-    sslClient.stop();
-    return;
-  }
-
+  //Get data and attempt to parse it
+  //This can fail two ways: httpReturnCode != 200, or parse fails
+  //In either case, we will attempt to pull it anew
+  int httpReturnCode;
+  bool parseSuccess = false;
   // Allocate the JSON document
   // Use arduinojson.org/v6/assistant to compute the capacity.
   DynamicJsonDocument doc(8192);
-  
-  // Parse JSON object
-  DeserializationError error = deserializeJson(doc, sslClient);
-  if (error) {
-    Serial.print(F("deserializeJson() failed: "));
-    Serial.println(error.f_str());
-    displayError(F("Couldn't process data. Please restart."));
-    sslClient.stop();
+
+  for(int attempts=0; attempts<3; attempts++) {
+    Serial.print(F("\nConnecting to data source "));
+    Serial.println(DATA_SRC);
+    http.begin(DATA_SRC);
+    httpReturnCode = http.GET();
+    if(httpReturnCode==200) { //got data, let's try to parse
+      DeserializationError error = deserializeJson(doc, http.getStream());
+      if (error) {
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+      } else {
+        parseSuccess = true;
+        break; //leave attempts loop
+      }
+    }
+  }
+  if(httpReturnCode!=200) {
+    Serial.println(F("Wasn't able to connect to host."));
+    displayError(F("Couldn't connect to data host.")); //TODO could display code
+    //Close unneeded things
+    http.end();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    return;
+  }
+  if(!parseSuccess) {
+    displayError(F("Couldn't process data."));
+    //Close unneeded things
+    http.end();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
     return;
   }
 
-  // Disconnect
-  sslClient.stop();
+  //If we reach this point, we've got good, parsed data
 
-  // display on serial - last seen in commit 12eada4
+  //Close unneeded things
+  http.end();
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
 
   // display on e-ink
   display.init(115200);
@@ -145,16 +170,8 @@ void setup() {
       //header
       if(day["weekdayRelative"]=="Today") {
         //render big top date
-
-        //approach A:
-        //the date should be centered, and day/month rendered to its sides - last seen in commit 12eada4
-
-        //approach B:
-        //date is left-aligned in right half; day/month right-aligned in left half (ish) - last seen in commit 12eada4
-
-        //approach C:
-        //same as B, but entire line is centered rather than using a fixed middle
-        //add up width of all components
+        //date is left-aligned in right half; day/month right-aligned in left half
+        //entire line is centered; add up width of all components
         cw = 0; //center width
         display.setFont(&IOTLight48pt7b);
         display.getTextBounds(day["weekdayShort"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
@@ -167,25 +184,43 @@ void setup() {
         cw += 30 + tbw;
         
         //now render, using calculated center width
-        x = (display.width()-cw)/2;
+        #ifdef HORIZ_OFFSET_PX
+          x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+        #else
+          x = (display.width()-cw)/2;
+        #endif
         y += 155; //new line
 
         if(day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
 
         display.setFont(&IOTLight48pt7b);
         //render weekday
-        x = (display.width()-cw)/2;
+        #ifdef HORIZ_OFFSET_PX
+          x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+        #else
+          x = (display.width()-cw)/2;
+        #endif
         if(ww<mw) x += mw-ww;
         display.setCursor(x, y - 72);
         display.print(day["weekdayShort"].as<char*>());
         //render month
-        x = (display.width()-cw)/2;
+        #ifdef HORIZ_OFFSET_PX
+          x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+        #else
+          x = (display.width()-cw)/2;
+        #endif
         if(mw<ww) x += ww-mw;
+        x += 4; //why do we need?
         display.setCursor(x, y);
         display.print(day["monthShort"].as<char*>());
 
         display.setFont(&IOTBold108pt7b);
-        x = (display.width()-cw)/2 + (mw>ww? mw: ww) + 30;
+        #ifdef HORIZ_OFFSET_PX
+          x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+        #else
+          x = (display.width()-cw)/2;
+        #endif
+        x += (mw>ww? mw: ww) + 30;
         display.setCursor(x, y-256); //the -256 became necessary somewhere between 72pt and 108pt
         display.print(day["date"].as<char*>());
 
@@ -193,9 +228,7 @@ void setup() {
 
         y += 12 + 4; //padding
 
-        //sun/moon, two-line version - last seen in commit 12eada4
-
-        //sun/moon, one-line version
+        //sun/moon
         //entire line is centered; add up width of all components
         cw = 0; //center width
 
@@ -226,7 +259,11 @@ void setup() {
 
         //now render, using calculated center width
         y += 16*2; //new line
-        x = (display.width()-cw)/2;
+        #ifdef HORIZ_OFFSET_PX
+          x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+        #else
+          x = (display.width()-cw)/2;
+        #endif
 
         display.setFont(&IOTSymbols16pt7b);
         display.setCursor(x, y);
@@ -295,9 +332,6 @@ void setup() {
         //render smaller date header
         y += 12; //padding
 
-        //relative date - last seen in commit 12eada4
-
-        //actual date
         if(day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
         cw = 0;
         display.setFont(&IOTRegular21pt7b);
@@ -309,7 +343,11 @@ void setup() {
         //display.setFont(&IOTBold21pt7b);
         display.getTextBounds(day["date"].as<char*>(),0,0,&tbx,&tby,&tbw,&tbh);
         cw += tbw;
-        x = (display.width()-cw)/2;
+        #ifdef HORIZ_OFFSET_PX
+          x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+        #else
+          x = (display.width()-cw)/2;
+        #endif
         //display.setFont(&IOTRegular21pt7b);
         display.setCursor(x, y);
         display.print(day["weekdayShort"].as<char*>());
@@ -418,30 +456,57 @@ void setup() {
       }
     } //end for each day
 
+    //battery level
+    y += 12; //padding
+    x = 10; //left padding
+    y += 16*2; //new line
+    display.setFont(&IOTLight16pt7b);
+    display.setCursor(x, y);
+    display.print("Battery Voltage");
+    display.getTextBounds("Battery Voltage",0,0,&tbx,&tby,&tbw,&tbh);
+    x += tbw + 10; //gap between
+    display.setFont(&IOTLight16pt7b);
+    display.setCursor(x, y);
+    //itoa(battLevel,buf,10); //int to char buffer
+    display.print(battLevel);
+    //display.getTextBounds(buf,0,0,&tbx,&tby,&tbw,&tbh);
+    //x += tbw + 5; //gap between
+    //display.print("mV");
+
+    //displayBatteryBar();
+
   } while (display.nextPage());
-  display.hibernate();
-  
-} //end fn setup
+  //display.hibernate();
+  display.powerOff();
+
+  //loop() will sleep
+
+} //end setup
 
 void displayError(String msg) {
   // display on e-ink
-  display.init(115200);
-  display.setRotation(1);
-  display.setTextWrap(false);
-  display.setTextColor(GxEPD_BLACK);
-  display.setFont(&IOTLight16pt7b);
-
+  
   //vars for calculating text bounds and setting draw origin
-  int16_t tbx, tby; uint16_t tbw, tbh;
-  display.getTextBounds(msg, 0, 0, &tbx, &tby, &tbw, &tbh);
-
+  int16_t tbx, tby; uint16_t tbw, tbh, cw; uint16_t x, y;
+  
   display.setFullWindow();
   display.firstPage();
   do
   {
     display.fillScreen(GxEPD_WHITE);
-    display.setCursor(((display.width() - tbw) / 2) - tbx, ((display.height() - tbh) / 2) - tby);
+  
+    display.setTextColor(GxEPD_BLACK);
+    display.setFont(&IOTLight16pt7b);
+    display.getTextBounds(msg, 0, 0, &tbx, &tby, &tbw, &tbh);
+    #ifdef HORIZ_OFFSET_PX
+      display.setCursor(((display.width() - tbw) / 2) - tbx + HORIZ_OFFSET_PX, ((display.height() - tbh) / 2) - tby);
+    #else
+      display.setCursor(((display.width() - tbw) / 2) - tbx, ((display.height() - tbh) / 2) - tby);
+    #endif
     display.print(msg);
+
+    //displayBatteryBar();
+
   } while (display.nextPage());
   display.hibernate();
 }
@@ -449,6 +514,55 @@ void displayClear() {
   displayError("");
 }
 
+void displayBatteryBar() {
+  //as part of regular display cycle
+  //vars for calculating text bounds and setting draw origin
+  int16_t tbx, tby; uint16_t tbw, tbh, cw; uint16_t x, y;
+  display.setFont(&IOTBold16pt7b);
+  if(battLevel<3550) {
+    display.fillRect(0, display.height()-48, display.width(), 48, (battLevel<200?GxEPD_BLACK:GxEPD_RED));
+    display.getTextBounds((battLevel<200?"No battery":"Low battery"),0,0,&tbx,&tby,&tbw,&tbh);
+    cw = tbw;
+    y += display.height()-16;
+    #ifdef HORIZ_OFFSET_PX
+      x = ((display.width()-cw)/2)+HORIZ_OFFSET_PX;
+    #else
+      x = (display.width()-cw)/2;
+    #endif
+    display.setTextColor(GxEPD_WHITE);
+    display.setCursor(x, y);
+    display.print((battLevel<200?"No battery":"Low battery"));
+  }
+}
+
 void loop() {
-  // code for inspecting the HTTP response directly by reading from sslClient - last seen in commit 12eada4
+  //All the magic happens in setup()
+  //Once that's done (whether successful or not), go to sleep
+
+  // If battery is too low (see getBattery code), enter deepSleep and do not wake up
+  if(battLevel == 0) {
+    esp_deep_sleep_start();
+  }
+
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+  }
+
+  int wakeInSec = 0;
+  wakeInSec = timeinfo.tm_hour * 60 * 60 + timeinfo.tm_min + timeinfo.tm_sec; //time since midnight
+  wakeInSec = (wakeInSec < 86400? 86400 - wakeInSec: 0); //time until midnight
+  wakeInSec += 60; //time until 00:01:00
+  if(wakeInSec >= 86400) wakeInSec -= 86400; //in case it's e.g. 00:00:30, only wait 30s, not 24h 30s!
+
+  Serial.print("Wake in sec: ");
+  Serial.println(wakeInSec);
+
+  esp_sleep_enable_timer_wakeup(wakeInSec * 1000000ULL);
+  Serial.flush(); 
+  esp_deep_sleep_start();
+}
+
+float readBatteryVoltage() {
+  return analogRead(35) / 4096.0 * 7.445;
 }
