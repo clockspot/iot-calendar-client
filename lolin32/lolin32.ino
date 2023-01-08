@@ -552,16 +552,15 @@ void loop() {
     Serial.println("Failed to obtain time");
   }
 
-  int wakeInSec = 0;
-  wakeInSec = timeinfo.tm_hour * 60 * 60 + timeinfo.tm_min + timeinfo.tm_sec; //time since midnight
-  wakeInSec = (wakeInSec < 86400? 86400 - wakeInSec: 0); //time until midnight
-  wakeInSec += 60; //time until 00:01:00
-  if(wakeInSec >= 86400) wakeInSec -= 86400; //in case it's e.g. 00:00:30, only wait 30s, not 24h 30s!
-
-  Serial.print("Wake in sec: ");
-  Serial.println(wakeInSec);
-
-  esp_sleep_enable_timer_wakeup(wakeInSec * 1000000ULL);
+  int todInSec = 0;
+  todInSec = timeinfo.tm_hour*60*60 + timeinfo.tm_min*60 + timeinfo.tm_sec;
+  
+  if(todInSec>43200) { //we're early: it's PM
+    esp_sleep_enable_timer_wakeup((86400*2 - todInSec) * 1000000ULL);  
+  } else { //we're late: it's AM
+    esp_sleep_enable_timer_wakeup((86400 - todInSec) * 1000000ULL);  
+  }
+  
   Serial.flush(); 
   esp_deep_sleep_start();
 }
