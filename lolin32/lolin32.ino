@@ -191,7 +191,10 @@ void setup() {
         #endif
         y += 155; //new line
 
-        if(day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
+        display.setTextColor(GxEPD_BLACK);
+        #ifdef SUNDAY_IN_RED
+          if(SUNDAY_IN_RED && day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
+        #endif
 
         display.setFont(&IOTLight48pt7b);
         //render weekday
