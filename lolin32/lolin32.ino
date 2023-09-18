@@ -346,8 +346,10 @@ void setup() {
       } else { //not today
         //render smaller date header
         y += 12; //padding
-
-        if(day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
+        
+        #ifdef SUNDAY_IN_RED
+          if(SUNDAY_IN_RED && day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
+        #endif
         cw = 0;
         display.setFont(&IOTRegular21pt7b);
         display.getTextBounds(day["weekdayShort"].as<String>(),0,0,&tbx,&tby,&tbw,&tbh);
