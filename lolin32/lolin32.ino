@@ -23,6 +23,8 @@ GxEPD2_3C<GxEPD2_750c_Z08, GxEPD2_750c_Z08::HEIGHT/2> display(GxEPD2_750c_Z08(/*
 
 float battLevel;
 HTTPClient http;
+struct tm timeinfo;
+int todInSec;
 
 // Main flow of the program. It is designed to boot up, pull the info and refresh the screen, and then go back into deep sleep.
 void setup() {
@@ -96,6 +98,12 @@ void setup() {
 
   // Get time from timeserver - used when going into deep sleep again to ensure that we wake at the right hour
   configTime(TZ_OFFSET_SEC, DST_OFFSET_SEC, NTP_HOST);
+  
+  //Convert to time of day in seconds (do it now so it can be included in the request and logged)
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+  }
+  todInSec = timeinfo.tm_hour*60*60 + timeinfo.tm_min*60 + timeinfo.tm_sec;
 
   //Get data and attempt to parse it
   //This can fail two ways: httpReturnCode != 200, or parse fails
@@ -108,8 +116,12 @@ void setup() {
 
   for(int attempts=0; attempts<3; attempts++) {
     Serial.print(F("\nConnecting to data source "));
-    Serial.println(DATA_SRC);
-    http.begin(DATA_SRC);
+    Serial.print(DATA_SRC);
+    Serial.print(F(" at tod "));
+    Serial.println(todInSec,DEC);
+//     std::string targetURL(DATA_SRC);
+//     std::string todInSecStr = std::to_string(todInSec);
+    http.begin(String(DATA_SRC)+"&tod="+String(todInSec));
     httpReturnCode = http.GET();
     if(httpReturnCode==200) { //got data, let's try to parse
       DeserializationError error = deserializeJson(doc, http.getStream());
@@ -334,8 +346,10 @@ void setup() {
       } else { //not today
         //render smaller date header
         y += 12; //padding
-
-        if(day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
+        
+        #ifdef SUNDAY_IN_RED
+          if(SUNDAY_IN_RED && day["weekdayShort"]=="Sun") display.setTextColor(GxEPD_RED);
+        #endif
         cw = 0;
         display.setFont(&IOTRegular21pt7b);
         display.getTextBounds(day["weekdayShort"].as<String>(),0,0,&tbx,&tby,&tbw,&tbh);
@@ -547,19 +561,12 @@ void loop() {
     esp_deep_sleep_start();
   }
 
-  struct tm timeinfo;
-  if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-  }
-
-  int todInSec = 0;
-  todInSec = timeinfo.tm_hour*60*60 + timeinfo.tm_min*60 + timeinfo.tm_sec;
-  
-  if(todInSec>43200) { //we're early: it's PM
+  if(todInSec>43200) { //we're early: it's PM - example: (86400*2)-80852 = 91948
     esp_sleep_enable_timer_wakeup((86400*2 - todInSec) * 1000000ULL);  
-  } else { //we're late: it's AM
+  } else { //we're late: it's AM - example: 86400-3600 = 82800
     esp_sleep_enable_timer_wakeup((86400 - todInSec) * 1000000ULL);  
   }
+  //TODO maybe consider letting the webserver tell us how long to sleep
   
   Serial.flush(); 
   esp_deep_sleep_start();
